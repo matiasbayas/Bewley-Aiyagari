@@ -2,25 +2,35 @@ import numpy as np
 import scipy as sp
 from scipy.stats import norm
 from numba import vectorize, guvectorize, njit
-import RognlieCode as rc
-
 
 def agrid(amin, amax, I):
-    
+
     a = np.linspace(amin, amax, I)    
-    
     return a
 
 
+
+@njit
+def within_tolerance(x1, x2, tol):
+    """Efficiently test max(abs(x1-x2)) <= tol for same-dim x1, x2"""
+    # implement by obtaining flattened views using ravel, then looping
+    y1 = x1.ravel()
+    y2 = x2.ravel()
+
+    for i in range(y1.shape[0]):
+        if np.abs(y1[i] - y2[i]) > tol:
+            return False
+    return True
+
 def updatev(V, a, y, La, r, gamma, rho, Delta = 0.01):
-    
+
     amin = a[0]
     da = a[2] - a[1]
     I = np.shape(a)[0]
     J = np.shape(y)[0]
     dVf = np.zeros([I,J])
     dVb = np.zeros([I,J])
-       
+
     dVf[0:I-1,:] = (V[1:I,:] - V[0:I-1,:])/da
     dVf[I-1,:] = 0
     dVb[1:I,:] = (V[1:I,:] - V[0:I-1,:])/da
@@ -47,23 +57,23 @@ def updatev(V, a, y, La, r, gamma, rho, Delta = 0.01):
     h = c**(1-gamma)/(1-gamma) + s*dV
 
     Vi = (h - rho*V + V@La)*Delta + V
-   
+
     return Vi, s, c
 
 
 def improvev(V, s, c, a, y, La, r, gamma, rho, Delta = 0.01, it = 150):
-    
+
     amin = a[0]
     da = a[2] - a[1]
     I = np.shape(a)[0]
     J = np.shape(y)[0]
     dVf = np.zeros([I,J])
     dVb = np.zeros([I,J])
-    
+
     iF = s > 0
     iB = s < 0
     i0 = 1 - iF - iB
-    
+
     c0 = np.transpose(y[:,np.newaxis] + r*a)
     dV0 = c0**(-gamma)
 
@@ -75,30 +85,30 @@ def improvev(V, s, c, a, y, La, r, gamma, rho, Delta = 0.01, it = 150):
         dV = dVf*iF + dVb*iB + dV0*i0
         h = c**(1-gamma)/(1-gamma) + s*dV
         V = (h - rho*V + V@La)*Delta + V
-        
-        
+
+
     return V
 
 
 
 def solvehh(V, a, y, La, r, gamma, rho, Delta = 0.01, tol = 1e-8, maxit = 20_000):
-    
+
     for it in range(maxit):
         Vi, s, c = updatev(V, a, y, La, r, gamma, rho)
-        if it % 5 == 0 and rc.within_tolerance(V, Vi, tol):
+        if it % 5 == 0 and within_tolerance(V, Vi, tol):
             break
         V = Vi
-        
+
         V = improvev(V, s, c, a, y, La, r, gamma, rho)
-        
+
     else:
         raise ValueError(f'No convergence after {maxit} forward iterations!')
-        
+
     return V, s, c
 
 @njit
 def forwarditerateD(D, La, s, Delta, da):
-    
+
     I = D.shape[0]
     J = D.shape[1]
 
@@ -108,8 +118,8 @@ def forwarditerateD(D, La, s, Delta, da):
     TrL = -np.minimum(Tr,0)
 
     Dnew = np.zeros_like(D)
-    Dnew[I,J] = D[I,J] 
-    
+    Dnew[I,J] = D[I,J]
+
     for i in range(I-1):
         for j in range(J):
             d = D[i,j]
@@ -129,7 +139,7 @@ def solveD(D_seed, La, s, Delta, da, tol=1E-10, maxit=50_000):
         Dnew = forwarditerateD(D, La, s, Delta, da)
 
         # only check convergence every 5 iterations for efficiency
-        if it % 5 == 0 and rc.within_tolerance(D, Dnew, tol):
+        if it % 5 == 0 and within_tolerance(D, Dnew, tol):
             break
         D = Dnew
     else:
@@ -138,6 +148,3 @@ def solveD(D_seed, La, s, Delta, da, tol=1E-10, maxit=50_000):
     D = Dnew
 
     return D
-
-
-
