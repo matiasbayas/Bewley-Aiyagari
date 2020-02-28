@@ -1,7 +1,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numba import vectorize, guvectorize, njit
-import RognlieCode as r1
+
+def agrid(amax,N,amin=0,pivot=0.25):
+    """Grid with a+pivot evenly log-spaced between
+    amin+pivot and amax+pivot.
+    """
+    a = np.geomspace(amin+pivot,amax+pivot,N) - pivot
+    a[0] = amin # make sure *exactly* equal to amin
+    return a
+
+
+@njit
+def within_tolerance(x1, x2, tol):
+    """Efficiently test max(abs(x1-x2)) <= tol for same-dim x1, x2"""
+    # implement by obtaining flattened views using ravel, then looping
+    y1 = x1.ravel()
+    y2 = x2.ravel()
+
+    for i in range(y1.shape[0]):
+        if np.abs(y1[i] - y2[i]) > tol:
+            return False
+    return True
+
+
 
 def updatev(V,a,y,La,r,gamma,rho,Delta = 0.01):
     amin = a[0]
@@ -81,7 +103,7 @@ def hh_iter(v_seed, r, gamma, rho, a_grid, y, La, Delta = 0.01, tol = 1e-8, maxi
 
         Vi = (h - rho*V + V@La)*Delta + V
 
-        if it % 5 == 0 and r1.within_tolerance(V, Vi, tol):
+        if it % 5 == 0 and within_tolerance(V, Vi, tol):
             break
         V = Vi
 
@@ -130,7 +152,7 @@ def dist_ss2(D_seed, La, s, Delta, da, tol=1E-10, maxit=50_000):
         Dnew = forward_iterate2(D, La, s, Delta, da)
 
         # only check convergence every 5 iterations for efficiency
-        if it % 5 == 0 and r1.within_tolerance(D, Dnew, tol):
+        if it % 5 == 0 and within_tolerance(D, Dnew, tol):
             break
         D = Dnew
     else:
